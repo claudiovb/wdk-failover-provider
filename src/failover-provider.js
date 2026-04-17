@@ -145,7 +145,7 @@ export default class FailoverProvider {
    * @param {string | symbol} p The method/property name.
    * @param {unknown} receiver The JS Proxy.
    * @param {number} retries The number of retries.
-   * @returns {(string extends keyof T ? T[keyof T & string] : any) | (symbol extends keyof T ? T[keyof T & symbol] : any) | ((...args: any[]) => any | Promise<any>)}
+   * @returns {any}
    */
   _proxy (target, p, receiver, retries = this._retries) {
     let prop
@@ -160,14 +160,7 @@ export default class FailoverProvider {
       return this._proxy(provider, p, receiver, retries - 1)
     }
 
-    /**
-     * @param {...any} args
-     * @returns {any | Promise<any>}
-     */
     return (...args) => {
-      /**
-       * @type {any | Promise<any>}
-       */
       let re
 
       // Retry on sync functions
@@ -178,30 +171,20 @@ export default class FailoverProvider {
         if (retries <= 0 || !this._shouldRetryOn(er)) throw er
         const provider = this._switch(target)
         const property = this._proxy(provider, p, receiver, retries - 1)
-        if (typeof property === 'function') return property.apply(this, args)
+        if (typeof property === 'function') return property(...args)
         return property
       }
 
       // Retry on async functions
       return re
-        .then(
-          /**
-           * @param {any} re
-           */
-          (re) => re
-        )
-        .catch(
-          /**
-           * @param {Error} er
-           */
-          (er) => {
-            if (retries <= 0 || !this._shouldRetryOn(er)) throw er
-            const provider = this._switch(target)
-            const property = this._proxy(provider, p, receiver, retries - 1)
-            if (typeof property === 'function') return property.apply(this, args)
-            return property
-          }
-        )
+        .then((re) => re)
+        .catch((er) => {
+          if (retries <= 0 || !this._shouldRetryOn(er)) throw er
+          const provider = this._switch(target)
+          const property = this._proxy(provider, p, receiver, retries - 1)
+          if (typeof property === 'function') return property(...args)
+          return property
+        })
     }
   }
 }
